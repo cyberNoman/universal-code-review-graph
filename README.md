@@ -13,6 +13,37 @@
 
 ---
 
+## See it in action
+
+```
+$ cd my-django-app/
+$ code-graph-server &
+
+You → AI:  "Build the code graph for this repo"
+AI  →  ✅ Done. 2,341 symbols · 4,892 edges · 127 files indexed (8.3s)
+
+You → AI:  "I changed checkout/views.py and checkout/serializers.py.
+            Review my PR — what do I need to check?"
+
+AI  →  [review_changes] scanning blast radius...
+
+       📁 Files to review (5 of 127):
+          checkout/views.py          ← changed
+          checkout/serializers.py    ← changed
+          checkout/models.py         ← downstream: CartItem, Order
+          payments/stripe.py         ← downstream: charge()
+          orders/tasks.py            ← upstream: calls process_checkout()
+
+       ⚡ 2,100 tokens used  (was 18,400 without graph)
+       🎯 Quality score: 8.7/10  (was 6.9/10)
+
+You → AI:  "What breaks if I rename process_checkout()?"
+AI  →  [get_impact] upstream callers: orders/tasks.py, api/webhooks.py
+                    downstream callees: payments/stripe.py, cart/models.py
+```
+
+---
+
 ## What it does
 
 AI coding tools re-read your entire codebase on every task.
@@ -56,10 +87,17 @@ graph LR
 ### Step 1 — Install
 
 ```bash
+# Option A — pip (recommended)
+pip install "universal-code-review-graph[all]"
+
+# Option B — from source
 git clone https://github.com/cyberNoman/universal-code-review-graph.git
 cd universal-code-review-graph/universal-code-graph
-pip install -r requirements.txt
+pip install -e ".[all]"
 ```
+
+The `[all]` installs grammars for Python, JavaScript, TypeScript, and Go.
+Want only one language? Use `[python]`, `[javascript]`, or `[go]`.
 
 ### Step 2 — Add to your AI
 
@@ -67,6 +105,10 @@ pip install -r requirements.txt
 <summary><b>Claude Code</b></summary>
 
 ```bash
+# After pip install:
+claude mcp add code-graph code-graph-server
+
+# Or using the script directly:
 claude mcp add code-graph python3 /path/to/universal-code-graph/server.py
 ```
 </details>

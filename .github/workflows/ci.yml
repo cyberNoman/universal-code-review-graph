@@ -7,9 +7,12 @@ on:
     branches: [ main ]
 
 jobs:
-  # ── Unit tests (graph engine only — no MCP dependency) ──────────────────
-  test-core:
-    name: Test core (Python ${{ matrix.python-version }})
+  # ── Unit tests — zero tree-sitter dependency ─────────────────────────────
+  # Tests only the graph engine (BFS, search, persistence, review_changes).
+  # tree-sitter is NOT installed here — these tests never call it.
+  # This job must always be green.
+  unit-tests:
+    name: Unit tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -19,44 +22,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install core dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r universal-code-graph/requirements-core.txt
-          pip install pytest
+      - name: Install minimal dependencies (no tree-sitter)
+        run: pip install networkx pytest
 
       - name: Run unit tests
-        run: |
-          cd universal-code-graph
-          PYTHONPATH=. python -m pytest tests/test_graph_core.py -v --tb=short
+        working-directory: universal-code-graph
+        env:
+          PYTHONPATH: .
+        run: python -m pytest tests/test_graph_core.py -v --tb=short
 
-  # ── Smoke tests against real code ───────────────────────────────────────
-  smoke:
+  # ── Smoke tests — real tree-sitter parsing ───────────────────────────────
+  # Tests actual file parsing. Skips gracefully if a grammar is not available.
+  # Allowed to fail if tree-sitter API changes — tracked separately.
+  smoke-tests:
     name: Smoke tests (language parsers)
     runs-on: ubuntu-latest
+    continue-on-error: true   # don't block merges on grammar API changes
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install core dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r universal-code-graph/requirements-core.txt
+      - name: Install dependencies with tree-sitter
+        run: pip install networkx "tree-sitter>=0.22,<0.24" tree-sitter-python tree-sitter-javascript tree-sitter-go
 
       - name: Run smoke tests
-        run: PYTHONPATH=universal-code-graph python universal-code-graph/tests/smoke_test.py
+        env:
+          PYTHONPATH: universal-code-graph
+        run: python universal-code-graph/tests/smoke_test.py
 
-  # ── Lint — only real errors, no style bikeshedding ──────────────────────
+  # ── Lint — syntax errors only ────────────────────────────────────────────
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -64,13 +66,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install flake8
         run: pip install flake8
 
-      - name: Lint — syntax errors and undefined names only
-        run: flake8 universal-code-graph/code_graph.py --select=E9,F63,F7,F82 --statistics
+      - name: Check for syntax errors and undefined names
+        run: |
+          flake8 universal-code-graph/code_graph.py \
+            --select=E9,F63,F7,F82 \
+            --statistics

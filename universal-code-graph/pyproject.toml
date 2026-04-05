@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "universal-code-review-graph"
+version = "1.0.0"
+description = "One MCP server, any AI assistant — 6-8x fewer tokens on code reviews"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "cyberNoman" }]
+requires-python = ">=3.9"
+keywords = ["mcp", "ai", "code-review", "graph", "tree-sitter", "claude", "kimi", "cursor", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core runtime — tree-sitter grammars are optional extras
+dependencies = [
+    "networkx>=3.0",
+    "mcp>=1.0.0",
+]
+
+[project.optional-dependencies]
+# Install all language grammars
+all = [
+    "tree-sitter>=0.22,<0.24",
+    "tree-sitter-python>=0.22",
+    "tree-sitter-javascript>=0.22",
+    "tree-sitter-go>=0.22",
+]
+python = ["tree-sitter>=0.22,<0.24", "tree-sitter-python>=0.22"]
+javascript = ["tree-sitter>=0.22,<0.24", "tree-sitter-javascript>=0.22"]
+go = ["tree-sitter>=0.22,<0.24", "tree-sitter-go>=0.22"]
+dev = [
+    "tree-sitter>=0.22,<0.24",
+    "tree-sitter-python>=0.22",
+    "tree-sitter-javascript>=0.22",
+    "tree-sitter-go>=0.22",
+    "pytest>=7.0",
+    "flake8>=6.0",
+]
+
+[project.scripts]
+# After pip install, users can run: code-graph-server
+code-graph-server = "universal_code_review_graph.server:run"
+
+[project.urls]
+Homepage = "https://github.com/cyberNoman/universal-code-review-graph"
+Repository = "https://github.com/cyberNoman/universal-code-review-graph"
+Documentation = "https://github.com/cyberNoman/universal-code-review-graph/tree/main/docs"
+"Bug Tracker" = "https://github.com/cyberNoman/universal-code-review-graph/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["universal_code_review_graph*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
