@@ -17,8 +17,17 @@ from collections import defaultdict
 
 import networkx as nx
 
-# Tree-sitter imports
-from tree_sitter import Language, Parser, Tree, Node
+# Tree-sitter — optional at module level so CodeGraph / Symbol / CallEdge
+# remain importable even when tree-sitter is not installed.
+# GraphBuilder will fail gracefully per-language if grammars are missing.
+try:
+    from tree_sitter import Language, Parser, Node
+    _TREE_SITTER_AVAILABLE = True
+except ImportError:
+    _TREE_SITTER_AVAILABLE = False
+    Language = None  # type: ignore
+    Parser = None    # type: ignore
+    Node = None      # type: ignore
 
 
 @dataclass
@@ -434,23 +443,57 @@ class GraphBuilder:
         self.parsers: Dict[str, Parser] = {}
         self._init_parsers()
 
+    @staticmethod
+    def _make_parser(lang_capsule_or_fn) -> "Optional[Parser]":
+        """
+        Build a tree-sitter Parser handling both API styles:
+          - tree-sitter >= 0.22: Parser(Language(capsule))
+          - tree-sitter <  0.22: parser.set_language(Language(capsule))
+        Also handles grammars that export language as a callable vs a capsule.
+        """
+        if not _TREE_SITTER_AVAILABLE:
+            return None
+        try:
+            # Some grammar packages export language as a callable; others as capsule
+            capsule = lang_capsule_or_fn() if callable(lang_capsule_or_fn) else lang_capsule_or_fn
+            lang = Language(capsule)
+            try:
+                # tree-sitter >= 0.22 accepts Language in constructor
+                return Parser(lang)
+            except TypeError:
+                # tree-sitter < 0.22 — use set_language
+                p = Parser()
+                p.set_language(lang)
+                return p
+        except Exception:
+            return None
+
     def _init_parsers(self) -> None:
+        if not _TREE_SITTER_AVAILABLE:
+            return
+
         try:
             from tree_sitter_python import language as python_language
-            self.parsers["python"] = Parser(Language(python_language))
+            p = self._make_parser(python_language)
+            if p:
+                self.parsers["python"] = p
         except ImportError:
             pass
 
         try:
             from tree_sitter_javascript import language as js_language
-            self.parsers["javascript"] = Parser(Language(js_language))
-            self.parsers["typescript"] = Parser(Language(js_language))
+            p = self._make_parser(js_language)
+            if p:
+                self.parsers["javascript"] = p
+                self.parsers["typescript"] = p
         except ImportError:
             pass
 
         try:
             from tree_sitter_go import language as go_language
-            self.parsers["go"] = Parser(Language(go_language))
+            p = self._make_parser(go_language)
+            if p:
+                self.parsers["go"] = p
         except ImportError:
             pass
 

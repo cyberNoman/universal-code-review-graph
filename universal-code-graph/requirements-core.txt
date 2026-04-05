@@ -1,6 +1,7 @@
-# Core graph engine — no MCP needed for testing
-tree-sitter>=0.22.0,<0.26.0
-tree-sitter-python>=0.21.0
-tree-sitter-javascript>=0.21.0
-tree-sitter-go>=0.21.0
+# Core graph engine dependencies — used by CI tests (no MCP needed)
+# Pinned to a known-compatible range
+tree-sitter>=0.22.0,<0.24.0
+tree-sitter-python>=0.22.0
+tree-sitter-javascript>=0.22.0
+tree-sitter-go>=0.22.0
 networkx>=3.0
