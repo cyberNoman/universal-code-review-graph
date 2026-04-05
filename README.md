@@ -2,157 +2,56 @@
 
 <div align="center">
 
-**Stop feeding your entire codebase to AI on every task.**
-
-AI coding tools re-read your whole codebase on every request.
-`universal-code-review-graph` fixes that — it builds a structural map of your code,
-tracks call relationships, and gives your AI assistant *only* the context it needs.
+**One MCP server. Any AI assistant. 6–8× fewer tokens on every code review.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://python.org)
 [![MCP](https://img.shields.io/badge/Protocol-MCP-purple)](https://modelcontextprotocol.io)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](universal-code-graph/CONTRIBUTING.md)
 
 </div>
 
 ---
 
-## The Token Problem
+## What it does
+
+AI coding tools re-read your entire codebase on every task.
+This tool stops that.
+
+It builds a structural call graph of your code using [Tree-sitter](https://tree-sitter.github.io/tree-sitter/), stores it in SQLite, and exposes it via [MCP](https://modelcontextprotocol.io/) so your AI reads **only the files that matter**.
 
 ```mermaid
 graph LR
-    subgraph WITHOUT["❌  Without Graph — 13,205 tokens"]
-        direction TB
-        AI1["🤖 AI Assistant"]
-        CB["📁 Entire Codebase\n40+ files"]
-        AI1 -->|"reads everything"| CB
+    subgraph BEFORE["❌ Before — 13,205 tokens"]
+        A1["🤖 AI"] -->|reads everything| B1["📁 40+ files"]
     end
-
-    subgraph WITH["✅  With Graph — 1,928 tokens"]
-        direction TB
-        AI2["🤖 AI Assistant"]
-        G["🔷 Code Graph"]
-        BR["📁 Blast Radius\n3–5 files only"]
-        AI2 -->|"queries graph"| G
-        G -->|"returns minimal set"| BR
+    subgraph AFTER["✅ After — 1,928 tokens"]
+        A2["🤖 AI"] -->|queries graph| G["🔷 Graph"]
+        G -->|blast radius| B2["📁 4 files only"]
     end
-
-    WITHOUT -.->|"6.8× fewer tokens\nhigher review quality"| WITH
-
-    style WITHOUT fill:#2d1515,stroke:#ff4444,color:#fff
-    style WITH fill:#152d15,stroke:#44ff44,color:#fff
+    BEFORE -.->|"6.8× fewer tokens"| AFTER
+    style BEFORE fill:#2d1515,stroke:#ff4444,color:#fff
+    style AFTER fill:#152d15,stroke:#44ff44,color:#fff
 ```
 
 ---
 
-## The Problem
+## Works with any AI assistant
 
-Every time you ask an AI to review code, it reads *everything*:
-
-```
-You:  "Review this PR — I changed src/parser.py"
-
-AI:   reads main.py ... reads utils.py ... reads config.py ...
-      reads parser.py ... reads compiler.py ... reads tests/ ...
-      13,205 tokens consumed. Review quality: 7.2/10
-```
-
-That's slow, expensive, and the AI gets confused by irrelevant context.
-
-## The Solution
-
-```
-You:  "Review this PR — I changed src/parser.py"
-
-AI:   queries graph → finds blast radius: parser.py + 2 dependent files
-      1,928 tokens consumed. Review quality: 8.8/10
-
-      6.8× fewer tokens. Better answer.
-```
+| AI | Token savings |
+|----|--------------|
+| Kimi K2.5 | ~7.5× |
+| Claude / Claude Code | ~6.8× |
+| Gemini Pro | ~7.2× |
+| ChatGPT / GPT-4o | ~6.5× |
+| Qwen | ~6.7× |
+| Cursor | ~7.0× |
+| Windsurf | ~7.0× |
+| Zed, Continue, any MCP client | ~6.5× |
 
 ---
 
-## Works with ANY AI assistant
-
-This is not a Claude-only tool. It works with every AI that supports [MCP](https://modelcontextprotocol.io/):
-
-| AI Assistant | Token savings | Status |
-|---|---|---|
-| **Kimi K2.5** | ~7.5× | ✅ |
-| **Claude / Claude Code** | ~6.8× | ✅ |
-| **Gemini Pro** | ~7.2× | ✅ |
-| **ChatGPT / GPT-4o** | ~6.5× | ✅ |
-| **Qwen** | ~6.7× | ✅ |
-| **Cursor** | ~7.0× | ✅ |
-| **Windsurf** | ~7.0× | ✅ |
-| **Zed** | ~6.5× | ✅ |
-| **Continue** | ~6.5× | ✅ |
-| Any MCP-compatible client | varies | ✅ |
-
----
-
-## How It Works
-
-```mermaid
-flowchart TD
-    A["📂 Your Source Code\nPython · JS · TS · Go"] --> B
-
-    B["🌳 Tree-sitter Parser\nParses every file into a syntax tree"]
-    B --> C
-
-    C["🔍 Symbol Extraction\nFunctions · Classes · Methods"]
-    C --> D
-
-    D["📊 Call Edge Extraction\nWho calls whom?"]
-    D --> E
-
-    E["🕸️ NetworkX DiGraph\nDirected call graph in memory"]
-    E --> F
-
-    F["💾 SQLite Database\n.code_graph.db — survives restarts"]
-    F --> G
-
-    G["🔌 MCP Server\nJSON-RPC over stdio"]
-    G --> H
-
-    H["🤖 Your AI Assistant\nQueries only what matters"]
-
-    style A fill:#1a1a2e,stroke:#4B6BFF,color:#fff
-    style B fill:#1a1a2e,stroke:#4B6BFF,color:#fff
-    style C fill:#1a1a2e,stroke:#4B6BFF,color:#fff
-    style D fill:#1a1a2e,stroke:#4B6BFF,color:#fff
-    style E fill:#16213e,stroke:#7ee787,color:#fff
-    style F fill:#16213e,stroke:#7ee787,color:#fff
-    style G fill:#0f3460,stroke:#e94560,color:#fff
-    style H fill:#0f3460,stroke:#e94560,color:#fff
-```
-
----
-
-## Blast Radius Algorithm
-
-```mermaid
-graph TD
-    CF["📝 Changed Files\ncheckout/views.py\ncheckout/serializers.py"]
-
-    CF --> SYM["🔍 Find All Symbols\nin changed files\nprocess_checkout · CartSerializer · ..."]
-
-    SYM --> UP["⬆️ Upstream BFS\nWho calls these?\npayments/stripe.py · orders/tasks.py"]
-    SYM --> DOWN["⬇️ Downstream BFS\nWhat do these call?\ncheckout/models.py · cart/models.py"]
-
-    UP --> RESULT["✅ Minimal Review Set\n5 files instead of 127\n2,100 tokens instead of 18,400"]
-    DOWN --> RESULT
-
-    style CF fill:#2d1515,stroke:#ff6b6b,color:#fff
-    style SYM fill:#1a2a1a,stroke:#7ee787,color:#fff
-    style UP fill:#1a1a2e,stroke:#4B6BFF,color:#fff
-    style DOWN fill:#1a1a2e,stroke:#4B6BFF,color:#fff
-    style RESULT fill:#152d15,stroke:#44ff44,color:#fff
-```
-
----
-
-## Quickstart (5 minutes)
+## Install in 2 steps
 
 ### Step 1 — Install
 
@@ -162,9 +61,7 @@ cd universal-code-review-graph/universal-code-graph
 pip install -r requirements.txt
 ```
 
-### Step 2 — Connect your AI
-
-Pick your AI assistant and add this to its MCP config:
+### Step 2 — Add to your AI
 
 <details>
 <summary><b>Claude Code</b></summary>
@@ -175,24 +72,8 @@ claude mcp add code-graph python3 /path/to/universal-code-graph/server.py
 </details>
 
 <details>
-<summary><b>Kimi K2.5</b></summary>
+<summary><b>Cursor</b> — edit <code>~/.cursor/mcp.json</code></summary>
 
-```json
-{
-  "mcpServers": {
-    "code-graph": {
-      "command": "python3",
-      "args": ["/path/to/universal-code-graph/server.py"]
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><b>Cursor</b></summary>
-
-Edit `~/.cursor/mcp.json`:
 ```json
 {
   "servers": {
@@ -207,24 +88,7 @@ Edit `~/.cursor/mcp.json`:
 </details>
 
 <details>
-<summary><b>Windsurf</b></summary>
-
-Edit `~/.codeium/windsurf/mcp_config.json`:
-```json
-{
-  "mcpServers": {
-    "code-graph": {
-      "command": "python3",
-      "args": ["/path/to/universal-code-graph/server.py"],
-      "type": "stdio"
-    }
-  }
-}
-```
-</details>
-
-<details>
-<summary><b>ChatGPT / GPT-4o / Qwen / Continue / Zed</b></summary>
+<summary><b>Kimi / Qwen / ChatGPT / Windsurf / Zed / Continue</b></summary>
 
 ```json
 {
@@ -238,222 +102,161 @@ Edit `~/.codeium/windsurf/mcp_config.json`:
 ```
 </details>
 
-### Step 3 — Build your first graph
-
-Tell your AI:
+That's it. Now tell your AI:
 
 ```
 Build the code graph for /home/me/my-project
 ```
 
-### Step 4 — Start saving tokens
-
-```
-I changed src/api/routes.py and src/db/models.py — what do I need to review?
-```
-
 ---
 
-## Token Savings — Real Numbers
+## How it works
 
 ```mermaid
-xychart-beta
-    title "Tokens Used Per Code Review"
-    x-axis ["Kimi K2.5", "Gemini Pro", "Claude", "ChatGPT", "Qwen", "Cursor", "Windsurf"]
-    y-axis "Tokens" 0 --> 20000
-    bar [15000, 18000, 13205, 14000, 12000, 13500, 7000]
-    bar [2000, 2500, 1928, 2150, 1800, 1930, 1000]
+flowchart TD
+    A["📂 Source Code\nPython · JS · TS · Go"] --> B["🌳 Tree-sitter\nParse every file"]
+    B --> C["🔍 Extract Symbols\nfunctions · classes · methods"]
+    C --> D["📊 Extract Call Edges\nwho calls whom"]
+    D --> E["🕸️ NetworkX DiGraph\nin-memory graph"]
+    E --> F["💾 SQLite .code_graph.db\nsurvives restarts"]
+    F --> G["🔌 MCP Server\nJSON-RPC over stdio"]
+    G --> H["🤖 Your AI\nreads only what matters"]
+    style E fill:#16213e,stroke:#7ee787,color:#fff
+    style F fill:#16213e,stroke:#7ee787,color:#fff
+    style G fill:#0f3460,stroke:#e94560,color:#fff
+    style H fill:#0f3460,stroke:#e94560,color:#fff
 ```
-
-> Blue = without graph · Orange = with graph
 
 ---
 
-## Available Tools
+## The 9 tools your AI gets
 
 ```mermaid
 mindmap
   root((9 MCP Tools))
-    Graph Management
+    Index
       build_graph
-        Index your whole repo
-        Saves to SQLite
       get_stats
-        Symbol counts
-        Most connected nodes
       export_graph
-        JSON format
-        DOT / Graphviz
-        Summary
-    Code Review
+    Review
       review_changes
-        Core feature
-        Blast radius for changed files
-        6-8x token savings
       get_impact
-        All callers of a symbol
-        All callees of a symbol
-    Exploration
+    Explore
       search_symbols
-        Wildcard support
-        Filter by type
       get_symbol_details
-        Location and signature
-        Callers and callees
       get_file_symbols
-        All symbols in a file
       find_paths
-        Call chains between symbols
 ```
+
+| Tool | What it does | Token impact |
+|------|-------------|-------------|
+| `build_graph` | Index repo — parse + build graph + save to SQLite | Run once |
+| **`review_changes`** | **Blast radius for changed files — the core feature** | **6–8× savings** |
+| `get_impact` | All callers + callees of a symbol | Refactoring safety |
+| `find_paths` | Call chains between two symbols | Debugging |
+| `search_symbols` | Find by name / wildcard (`parse*`) | Exploration |
+| `get_symbol_details` | Location, callers, callees for one symbol | Deep dive |
+| `get_file_symbols` | All symbols in a file | File overview |
+| `export_graph` | JSON, DOT (Graphviz), or summary | Tooling |
+| `get_stats` | Counts + most-connected nodes | Health check |
 
 ---
 
-## Architecture
+## Blast radius algorithm
 
 ```mermaid
-graph LR
-    subgraph CLIENT["AI Client Layer"]
-        K["Kimi K2.5"]
-        C["Claude"]
-        G["Gemini"]
-        CU["Cursor"]
-        W["Windsurf"]
-        CH["ChatGPT"]
-    end
-
-    subgraph MCP["MCP Server  (server.py)"]
-        S["9 Tools\nJSON-RPC over stdio"]
-    end
-
-    subgraph ENGINE["Graph Engine  (code_graph.py)"]
-        TS["🌳 Tree-sitter\nParsers"]
-        NX["🕸️ NetworkX\nDiGraph"]
-        SQ["💾 SQLite\n.code_graph.db"]
-        TS --> NX --> SQ
-    end
-
-    subgraph LANGS["Supported Languages"]
-        PY["Python"]
-        JS["JavaScript"]
-        TS2["TypeScript"]
-        GO["Go"]
-    end
-
-    K & C & G & CU & W & CH -->|"MCP protocol\nstdio"| S
-    S <--> NX
-    LANGS --> TS
-
-    style CLIENT fill:#0d1117,stroke:#30363d,color:#c9d1d9
-    style MCP fill:#161b22,stroke:#4B6BFF,color:#c9d1d9
-    style ENGINE fill:#161b22,stroke:#7ee787,color:#c9d1d9
-    style LANGS fill:#161b22,stroke:#f78166,color:#c9d1d9
+graph TD
+    CF["📝 Changed files\nsrc/parser.py · src/models.py"]
+    CF --> SYM["🔍 Symbols in changed files\nparse_source · Model.save"]
+    SYM --> UP["⬆️ Upstream BFS\nWho calls these?"]
+    SYM --> DOWN["⬇️ Downstream BFS\nWhat do these call?"]
+    UP --> OUT["✅ Minimal review set\n4 files · 2,100 tokens\ninstead of 40 files · 18,400 tokens"]
+    DOWN --> OUT
+    style CF fill:#2d1515,stroke:#ff6b6b,color:#fff
+    style OUT fill:#152d15,stroke:#44ff44,color:#fff
 ```
 
 ---
 
-## Supported Languages
+## Supported languages
 
-| Language | Symbol extraction | Call edges | Extensions |
-|---|---|---|---|
-| Python | ✅ | ✅ | `.py` |
-| JavaScript | ✅ | ✅ | `.js` `.jsx` |
-| TypeScript | ✅ | ✅ | `.ts` `.tsx` |
-| Go | ✅ | ✅ | `.go` |
-| Rust | 🔄 planned | 🔄 planned | `.rs` |
-| Java | 🔄 planned | 🔄 planned | `.java` |
-| C / C++ | 🔄 planned | 🔄 planned | `.c` `.cpp` |
+| Language | Symbols | Call edges |
+|----------|---------|------------|
+| Python | ✅ | ✅ |
+| JavaScript / JSX | ✅ | ✅ |
+| TypeScript / TSX | ✅ | ✅ |
+| Go | ✅ | ✅ |
+| Rust | planned | planned |
+| Java | planned | planned |
 
 ---
 
-## Real-World Example
+## Persistent across sessions
 
-```mermaid
-sequenceDiagram
-    actor Dev as 👨‍💻 Developer
-    participant AI as 🤖 AI Assistant
-    participant MCP as 🔌 MCP Server
-    participant DB as 💾 .code_graph.db
+On startup, the server automatically finds and loads `.code_graph.db` in the working directory.
+**You only run `build_graph` once per project** — not every session.
 
-    Dev->>AI: "I changed checkout/views.py — review my PR"
-    AI->>MCP: review_changes(["checkout/views.py"])
-    MCP->>DB: Load graph
-    DB-->>MCP: 2,341 symbols, 4,892 edges
-    MCP-->>AI: files_to_review: [views.py, models.py,\nstripe.py, cart.py, tasks.py]
-    AI->>Dev: Reads 5 files (2,100 tokens)\n"Here's what to check in your PR..."
+---
 
-    Note over Dev,DB: Without graph: AI reads 127 files (18,400 tokens)
-    Note over Dev,DB: With graph: AI reads 5 files (2,100 tokens) — 8.7× savings
+## Real example
+
+```
+Repository:  Django e-commerce app — 127 Python files
+
+Changed files:  checkout/views.py, checkout/serializers.py
+
+Without graph:  AI reads all 127 files — 18,400 tokens — quality 6.9/10
+With graph:     AI reads 5 files  —  2,100 tokens  — quality 8.7/10
+
+Savings: 8.7× fewer tokens, +1.8 quality score
 ```
 
 ---
 
-## VS Code Extension
-
-A full VS Code extension is included in the `vscode-code-graph/` directory:
-
-- **Sidebar panel** — browse symbols, classes, files, statistics
-- **`Ctrl+Shift+G`** — build graph for current workspace
-- **`Ctrl+Shift+S`** — search symbols
-- **Right-click menu** — get impact on any selected symbol
-- **One-click MCP config** — copy the right config for your AI assistant
-
-See [vscode-code-graph/README.md](vscode-code-graph/README.md) for build instructions.
-
----
-
-## Project Structure
+## Project layout
 
 ```
 universal-code-review-graph/
+├── universal-code-graph/     ← THE PRODUCT (Python MCP server)
+│   ├── server.py             MCP server entry point
+│   ├── code_graph.py         Graph engine (NetworkX + Tree-sitter)
+│   ├── requirements.txt      pip dependencies
+│   ├── configs/              Ready-made configs for every AI
+│   └── tests/                Unit + smoke tests
 │
-├── universal-code-graph/        # Python MCP server (core)
-│   ├── server.py                # MCP server entry point
-│   ├── code_graph.py            # Graph engine (NetworkX + Tree-sitter)
-│   ├── requirements.txt
-│   ├── configs/                 # Ready-made configs per AI assistant
-│   │   ├── claude.json
-│   │   ├── kimi.json
-│   │   ├── cursor.json
-│   │   ├── windsurf.json
-│   │   └── continue.json
-│   └── tests/                   # Unit tests
-│
-├── vscode-code-graph/           # VS Code extension
-│   ├── src/
-│   └── server/                  # Bundled Python backend
-│
-├── docs/                        # Full documentation
+├── docs/                     Full documentation
 │   ├── architecture.md
 │   ├── api-reference.md
 │   ├── developer-guide.md
 │   └── adding-a-language.md
 │
-└── README.md                    # This file
+├── vscode-code-graph/        Optional VS Code extension (not required)
+└── app/                      Landing page
 ```
 
 ---
 
 ## Contributing
 
-We welcome contributions! The most impactful things:
+See [universal-code-graph/CONTRIBUTING.md](universal-code-graph/CONTRIBUTING.md).
 
-1. **Add a language** (Rust, Java, C++) — see [docs/adding-a-language.md](docs/adding-a-language.md)
-2. **Improve call resolution** — better cross-file symbol matching
-3. **Report wrong blast radius** — open an issue with a minimal reproduction
-4. **Write tests** — see `universal-code-graph/tests/`
+Most wanted contributions:
+- **Add Rust / Java / C++** — see [docs/adding-a-language.md](docs/adding-a-language.md)
+- **Improve call resolution** — cross-file symbol matching
+- **Bug reports** — wrong blast radius results
 
 ---
 
 ## License
 
-MIT — free for personal and commercial use. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 ---
 
 <div align="center">
 
-**If this saved you tokens, give it a ⭐**
+**One server. Any AI. Fewer tokens.**
 
-Built for the whole AI community — not locked to any one assistant.
+⭐ Star it if it saved you tokens.
 
 </div>
