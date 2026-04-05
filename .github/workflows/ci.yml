@@ -33,7 +33,7 @@ jobs:
       - name: Run unit tests
         run: |
           cd universal-code-graph
-          python -m pytest tests/test_graph_core.py -v --tb=short
+          PYTHONPATH=. python -m pytest tests/test_graph_core.py -v --tb=short
 
   # ── Smoke tests against real code ───────────────────────────────────────
   smoke:
@@ -54,7 +54,7 @@ jobs:
           pip install -r universal-code-graph/requirements-core.txt
 
       - name: Run smoke tests
-        run: python universal-code-graph/tests/smoke_test.py
+        run: PYTHONPATH=universal-code-graph python universal-code-graph/tests/smoke_test.py
 
   # ── Lint — only real errors, no style bikeshedding ──────────────────────
   lint:
@@ -73,7 +73,4 @@ jobs:
         run: pip install flake8
 
       - name: Lint — syntax errors and undefined names only
-        run: >
-          flake8 universal-code-graph/code_graph.py
-          --select=E9,F63,F7,F82
-          --statistics
+        run: flake8 universal-code-graph/code_graph.py --select=E9,F63,F7,F82 --statistics
