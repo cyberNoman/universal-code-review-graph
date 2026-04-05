@@ -1,0 +1,13 @@
+{
+  "server": {
+    "name": "code-graph",
+    "transport": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["/path/to/universal-code-graph/server.py"],
+      "env": {
+        "PYTHONPATH": "/path/to/universal-code-graph"
+      }
+    }
+  }
+}

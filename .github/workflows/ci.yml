@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-python:
+    name: Test Python core
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          cd universal-code-graph
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: |
+          cd universal-code-graph
+          python -m pytest tests/ -v --tb=short
+
+      - name: Smoke test — index itself
+        run: |
+          cd universal-code-graph
+          python3 - << 'EOF'
+          from code_graph import GraphBuilder
+          builder = GraphBuilder(repo_path=".")
+          stats = builder.build()
+          assert stats["files_processed"] >= 1, "Should process at least one file"
+          assert stats["symbols_found"] > 0, "Should find symbols"
+          print(f"OK: {stats['symbols_found']} symbols, {stats['edges_found']} edges")
+          EOF
+
+  test-languages:
+    name: Test language parsers
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd universal-code-graph
+          pip install -r requirements.txt
+
+      - name: Test Python parser
+        run: |
+          cd universal-code-graph
+          python3 - << 'EOF'
+          from pathlib import Path
+          from code_graph import GraphBuilder
+
+          Path("/tmp/test_py.py").write_text("""
+          class MyClass:
+              def method_a(self):
+                  self.method_b()
+              def method_b(self):
+                  pass
+          def standalone():
+              obj = MyClass()
+              obj.method_a()
+          """)
+          builder = GraphBuilder(repo_path="/tmp")
+          builder.build()
+          g = builder.graph
+          assert len(g.symbols) >= 4, f"Expected 4+ symbols, got {len(g.symbols)}"
+          assert g.graph.number_of_edges() > 0, "Expected call edges"
+          print(f"Python parser OK: {len(g.symbols)} symbols, {g.graph.number_of_edges()} edges")
+          EOF
+
+      - name: Test JavaScript parser
+        run: |
+          cd universal-code-graph
+          python3 - << 'EOF'
+          from pathlib import Path
+          from code_graph import GraphBuilder
+
+          Path("/tmp/test_js.js").write_text("""
+          class ApiClient {
+            constructor() {}
+            fetchData() { return this.parseResponse(); }
+            parseResponse() { return {}; }
+          }
+          function main() {
+            const c = new ApiClient();
+            c.fetchData();
+          }
+          """)
+          builder = GraphBuilder(repo_path="/tmp")
+          builder.build()
+          g = builder.graph
+          assert len(g.symbols) >= 3, f"Expected 3+ symbols, got {len(g.symbols)}"
+          print(f"JS parser OK: {len(g.symbols)} symbols, {g.graph.number_of_edges()} edges")
+          EOF
+
+      - name: Test Go parser
+        run: |
+          cd universal-code-graph
+          python3 - << 'EOF'
+          from pathlib import Path
+          from code_graph import GraphBuilder
+
+          Path("/tmp/test_go.go").write_text("""
+          package main
+
+          type Server struct{}
+
+          func (s *Server) Start() {
+              s.Listen()
+          }
+
+          func (s *Server) Listen() {}
+
+          func main() {
+              srv := &Server{}
+              srv.Start()
+          }
+          """)
+          builder = GraphBuilder(repo_path="/tmp")
+          builder.build()
+          g = builder.graph
+          assert len(g.symbols) >= 3, f"Expected 3+ symbols, got {len(g.symbols)}"
+          print(f"Go parser OK: {len(g.symbols)} symbols, {g.graph.number_of_edges()} edges")
+          EOF
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install flake8
+        run: pip install flake8
+
+      - name: Lint Python
+        run: |
+          flake8 universal-code-graph/code_graph.py universal-code-graph/server.py \
+            --max-line-length=120 \
+            --ignore=E501,W503

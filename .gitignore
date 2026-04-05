@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+
+# Code graph database (generated per-repo)
+.code_graph.db
+
+# VS Code Extension
+vscode-code-graph/dist/
+vscode-code-graph/node_modules/
+vscode-code-graph/*.vsix
+vscode-code-graph/out/
+
+# Landing page
+app/node_modules/
+app/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover
+
+# Jupyter
+.ipynb_checkpoints/

@@ -1,0 +1,272 @@
+{
+  "name": "universal-code-graph",
+  "displayName": "Universal Code Review Graph",
+  "description": "Build code graphs for efficient AI-assisted reviews. Works with ALL AI assistants - save 6-8x tokens!",
+  "version": "1.0.0",
+  "publisher": "universal-code-graph",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Programming Languages",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "code review",
+    "mcp",
+    "graph",
+    "kimi",
+    "claude",
+    "gemini",
+    "qwen",
+    "tokens",
+    "context"
+  ],
+  "icon": "icons/icon.png",
+  "galleryBanner": {
+    "color": "#0B0F17",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/vscode-universal-code-graph"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/vscode-universal-code-graph/issues"
+  },
+  "homepage": "https://github.com/yourusername/vscode-universal-code-graph",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:codeGraph.buildGraph",
+    "onView:codeGraphExplorer"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeGraph.buildGraph",
+        "title": "Build Code Graph",
+        "category": "Code Graph",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "codeGraph.reviewChanges",
+        "title": "Review Changes",
+        "category": "Code Graph",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "codeGraph.getImpact",
+        "title": "Get Symbol Impact",
+        "category": "Code Graph",
+        "icon": "$(target)"
+      },
+      {
+        "command": "codeGraph.findPaths",
+        "title": "Find Call Paths",
+        "category": "Code Graph",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "codeGraph.searchSymbols",
+        "title": "Search Symbols",
+        "category": "Code Graph",
+        "icon": "$(search)"
+      },
+      {
+        "command": "codeGraph.exportGraph",
+        "title": "Export Graph",
+        "category": "Code Graph",
+        "icon": "$(export)"
+      },
+      {
+        "command": "codeGraph.viewStats",
+        "title": "View Graph Statistics",
+        "category": "Code Graph",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "codeGraph.refresh",
+        "title": "Refresh",
+        "category": "Code Graph",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codeGraph.openSymbol",
+        "title": "Open Symbol",
+        "category": "Code Graph"
+      },
+      {
+        "command": "codeGraph.copyMCPConfig",
+        "title": "Copy MCP Config",
+        "category": "Code Graph",
+        "icon": "$(copy)"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "codeGraphExplorer",
+          "name": "Code Graph",
+          "when": "workspaceHasCodeGraph",
+          "icon": "$(graph)",
+          "contextualTitle": "Code Graph Explorer"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codeGraph",
+          "title": "Code Graph",
+          "icon": "$(graph)"
+        }
+      ]
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "codeGraph.buildGraph",
+          "when": "workspaceHasFolders"
+        },
+        {
+          "command": "codeGraph.reviewChanges",
+          "when": "codeGraphHasData"
+        },
+        {
+          "command": "codeGraph.getImpact",
+          "when": "codeGraphHasData"
+        },
+        {
+          "command": "codeGraph.findPaths",
+          "when": "codeGraphHasData"
+        },
+        {
+          "command": "codeGraph.searchSymbols",
+          "when": "codeGraphHasData"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "codeGraph.buildGraph",
+          "when": "view == codeGraphExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codeGraph.refresh",
+          "when": "view == codeGraphExplorer",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codeGraph.getImpact",
+          "when": "view == codeGraphExplorer && viewItem == symbol",
+          "group": "inline"
+        },
+        {
+          "command": "codeGraph.openSymbol",
+          "when": "view == codeGraphExplorer && viewItem == symbol",
+          "group": "inline@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "codeGraph.getImpact",
+          "when": "editorHasSelection && codeGraphHasData",
+          "group": "codeGraph@1"
+        },
+        {
+          "command": "codeGraph.findPaths",
+          "when": "editorHasSelection && codeGraphHasData",
+          "group": "codeGraph@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Universal Code Graph",
+      "properties": {
+        "codeGraph.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/test_*.py",
+            "**/tests/**",
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/__pycache__/**",
+            "**/*.min.js",
+            "**/dist/**",
+            "**/build/**",
+            "**/venv/**",
+            "**/.venv/**"
+          ],
+          "description": "Patterns to exclude when building the code graph"
+        },
+        "codeGraph.maxDepth": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum depth for dependency traversal"
+        },
+        "codeGraph.autoBuild": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically build graph when opening a workspace"
+        },
+        "codeGraph.aiAssistant": {
+          "type": "string",
+          "enum": [
+            "kimi",
+            "claude",
+            "gemini",
+            "qwen",
+            "chatgpt",
+            "cursor",
+            "windsurf",
+            "other"
+          ],
+          "default": "kimi",
+          "description": "Your AI assistant for MCP configuration"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "codeGraph.buildGraph",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "workspaceHasFolders"
+      },
+      {
+        "command": "codeGraph.searchSymbols",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+shift+s",
+        "when": "codeGraphHasData"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
