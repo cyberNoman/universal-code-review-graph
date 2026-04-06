@@ -449,7 +449,8 @@ class GraphBuilder:
     @staticmethod
     def _make_parser(lang_capsule_or_fn) -> "Optional[Parser]":
         """
-        Build a tree-sitter Parser handling both API styles:
+        Build a tree-sitter Parser handling all API styles:
+          - tree-sitter >= 0.24: language may already be a Language object
           - tree-sitter >= 0.22: Parser(Language(capsule))
           - tree-sitter <  0.22: parser.set_language(Language(capsule))
         Also handles grammars that export language as a callable vs a capsule.
@@ -457,14 +458,16 @@ class GraphBuilder:
         if not _TREE_SITTER_AVAILABLE:
             return None
         try:
-            # Some grammar packages export language as a callable; others as capsule
-            capsule = lang_capsule_or_fn() if callable(lang_capsule_or_fn) else lang_capsule_or_fn
-            lang = Language(capsule)
+            obj = lang_capsule_or_fn() if callable(lang_capsule_or_fn) else lang_capsule_or_fn
+            # If it's already a Language instance, use it directly
+            if isinstance(obj, Language):
+                lang = obj
+            else:
+                lang = Language(obj)
+            # Try new-style constructor first, then fall back to set_language
             try:
-                # tree-sitter >= 0.22 accepts Language in constructor
                 return Parser(lang)
             except TypeError:
-                # tree-sitter < 0.22 — use set_language
                 p = Parser()
                 p.set_language(lang)
                 return p

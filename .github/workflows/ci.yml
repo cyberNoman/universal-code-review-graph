@@ -51,7 +51,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies with tree-sitter
-        run: pip install networkx "tree-sitter>=0.22,<0.24" tree-sitter-python tree-sitter-javascript tree-sitter-go
+        run: pip install networkx "tree-sitter>=0.22" tree-sitter-python tree-sitter-javascript tree-sitter-go
 
       - name: Run smoke tests
         env:
