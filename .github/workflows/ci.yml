@@ -27,7 +27,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install minimal dependencies (no tree-sitter)
-        run: pip install networkx pytest
+        run: pip install "networkx>=3.0,<4" pytest
 
       - name: Run unit tests
         working-directory: universal-code-graph

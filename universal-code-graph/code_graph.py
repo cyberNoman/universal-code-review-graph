@@ -167,10 +167,13 @@ class CodeGraph:
         """Find call paths between two symbols."""
         src = self.resolve_symbol(source) or source
         tgt = self.resolve_symbol(target) or target
+        # Guard: missing nodes or trivial same-node case — networkx 3.4 behaviour changed
+        if src not in self.graph or tgt not in self.graph or src == tgt:
+            return []
         try:
             paths = list(nx.all_simple_paths(self.graph, source=src, target=tgt, cutoff=10))
             return paths[:max_paths]
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
+        except Exception:
             return []
 
     def search_symbols(self, query: str, symbol_type: str = "any", limit: int = 20) -> List[Dict]:
