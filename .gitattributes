@@ -1,0 +1,10 @@
+# Force GitHub Linguist to detect Python as primary language
+# (VS Code extension TypeScript is secondary)
+
+universal-code-graph/*.py linguist-language=Python
+universal-code-graph/**/*.py linguist-language=Python
+
+vscode-code-graph/**/*.ts linguist-vendored=true
+app/**/*.ts linguist-vendored=true
+app/**/*.tsx linguist-vendored=true
+app/**/*.js linguist-vendored=true
