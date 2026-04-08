@@ -283,7 +283,7 @@ universal-code-review-graph/
 See [universal-code-graph/CONTRIBUTING.md](universal-code-graph/CONTRIBUTING.md).
 
 Most wanted contributions:
-- **Add Rust / Java / C++** — see [docs/adding-a-language.md](docs/adding-a-language.md)
+- **Add Rust / Java / C++** — see [universal-code-graph/CONTRIBUTING.md](universal-code-graph/CONTRIBUTING.md)
 - **Improve call resolution** — cross-file symbol matching
 - **Bug reports** — wrong blast radius results
 

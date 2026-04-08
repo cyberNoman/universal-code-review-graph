@@ -6,10 +6,14 @@ Supports: Python, JavaScript, TypeScript, Go
 Works with: Claude, Kimi, Qwen, Gemini, ChatGPT, Cursor, Windsurf, Zed, Continue
 """
 
+import hashlib
+import os
 import re
 import sqlite3
+import sys
+import time
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 
@@ -65,6 +69,45 @@ def make_symbol_key(file_path: str, name: str) -> str:
     return f"{file_path}::{name}"
 
 
+# ══════════════════════════════════════════════════════════════
+# Diagnostics — loud failures, never silent
+# ══════════════════════════════════════════════════════════════
+
+class BuildDiagnostics:
+    """Collects warnings, errors, and stats during a build."""
+
+    def __init__(self) -> None:
+        self.warnings: List[str] = []
+        self.errors: List[str] = []
+        self.files_parsed: int = 0
+        self.files_skipped: int = 0
+        self.files_failed: int = 0
+
+    def warn(self, msg: str) -> None:
+        self.warnings.append(msg)
+
+    def error(self, msg: str) -> None:
+        self.errors.append(msg)
+
+    def to_summary(self) -> Dict[str, Any]:
+        return {
+            "files_parsed": self.files_parsed,
+            "files_skipped": self.files_skipped,
+            "files_failed": self.files_failed,
+            "warnings": self.warnings,
+            "errors": self.errors,
+        }
+
+
+def _stderr(msg: str) -> None:
+    """Print to stderr so it's visible even when stdout is captured."""
+    print(msg, file=sys.stderr, flush=True)
+
+
+# ══════════════════════════════════════════════════════════════
+# CodeGraph — in-memory graph with NetworkX backend
+# ══════════════════════════════════════════════════════════════
+
 class CodeGraph:
     """In-memory code graph with NetworkX backend."""
 
@@ -75,6 +118,8 @@ class CodeGraph:
         self.file_symbols: Dict[str, List[str]] = defaultdict(list)
         # short_name index for cross-file call resolution
         self._short_name_index: Dict[str, List[str]] = defaultdict(list)
+        # file hash cache for incremental rebuilds
+        self._file_hashes: Dict[str, str] = {}
 
     # ──────────────────────────────────────────────────────────
     # Mutation
@@ -87,6 +132,23 @@ class CodeGraph:
         self._short_name_index[symbol.short_name].append(symbol.name)
         self.graph.add_node(symbol.name, **symbol.to_dict())
 
+    def remove_file(self, file_path: str) -> None:
+        """Remove all symbols and edges for a given file (for incremental rebuilds)."""
+        for sym_key in list(self.file_symbols.get(file_path, [])):
+            sym = self.symbols.pop(sym_key, None)
+            if sym:
+                self.graph.remove_node(sym_key)
+        self.file_symbols.pop(file_path, None)
+        # Rebuild short_name index from scratch (cheap for small repos)
+        self._rebuild_short_name_index()
+        # Remove from hash cache
+        self._file_hashes.pop(file_path, None)
+
+    def _rebuild_short_name_index(self) -> None:
+        self._short_name_index.clear()
+        for sym in self.symbols.values():
+            self._short_name_index[sym.short_name].append(sym.name)
+
     def add_call(self, edge: CallEdge) -> None:
         """Add a call edge. Both nodes are auto-created if missing."""
         if edge.caller not in self.graph:
@@ -94,6 +156,14 @@ class CodeGraph:
         if edge.callee not in self.graph:
             self.graph.add_node(edge.callee)
         self.graph.add_edge(edge.caller, edge.callee, **edge.to_dict())
+
+    def add_calls_batch(self, edges: List[CallEdge]) -> int:
+        """Add many edges at once. Returns count added."""
+        added = 0
+        for edge in edges:
+            self.add_call(edge)
+            added += 1
+        return added
 
     # ──────────────────────────────────────────────────────────
     # Queries
@@ -125,7 +195,7 @@ class CodeGraph:
 
         upstream: Set[str] = set()
         visited = {key}
-        queue = [(key, 0)]
+        queue: List[Tuple[str, int]] = [(key, 0)]
 
         while queue:
             current, depth = queue.pop(0)
@@ -147,7 +217,7 @@ class CodeGraph:
 
         downstream: Set[str] = set()
         visited = {key}
-        queue = [(key, 0)]
+        queue: List[Tuple[str, int]] = [(key, 0)]
 
         while queue:
             current, depth = queue.pop(0)
@@ -165,7 +235,6 @@ class CodeGraph:
         """Find call paths between two symbols."""
         src = self.resolve_symbol(source) or source
         tgt = self.resolve_symbol(target) or target
-        # Guard: missing nodes or trivial same-node case — networkx 3.4 behaviour changed
         if src not in self.graph or tgt not in self.graph or src == tgt:
             return []
         try:
@@ -178,7 +247,7 @@ class CodeGraph:
         """Search symbols by name pattern (wildcards supported)."""
         pattern = query.replace("*", ".*").replace("?", ".")
         regex = re.compile(pattern, re.IGNORECASE)
-        results = []
+        results: List[Dict] = []
         for symbol in self.symbols.values():
             if regex.search(symbol.short_name) or regex.search(symbol.name):
                 if symbol_type == "any" or symbol.symbol_type == symbol_type:
@@ -193,6 +262,7 @@ class CodeGraph:
         include_upstream: bool = True,
         include_downstream: bool = True,
         max_depth: int = 3,
+        max_files: int = 30,
     ) -> Dict:
         """Core feature: get the minimal set of symbols impacted by changed files."""
         impacted: Set[str] = set()
@@ -217,12 +287,16 @@ class CodeGraph:
             if sym:
                 impacted_files.add(sym.file_path)
 
+        impacted_files_list = list(impacted_files)
+        if len(impacted_files_list) > max_files:
+            impacted_files_list = impacted_files_list[:max_files]
+
         return {
             "symbols": list(impacted),
             "upstream": list(upstream_set),
             "downstream": list(downstream_set),
             "total": len(impacted),
-            "files": list(impacted_files),
+            "files": impacted_files_list,
         }
 
     def get_impact(self, symbol: str, max_depth: int = 5) -> Dict:
@@ -259,9 +333,9 @@ class CodeGraph:
     def export(self, format_type: str = "summary") -> Dict:
         if format_type == "json":
             return {
-                "nodes": [self.graph.nodes[n] for n in self.graph.nodes()],
+                "nodes": [dict(self.graph.nodes[n]) for n in self.graph.nodes()],
                 "edges": [
-                    {"source": u, "target": v, **self.graph.edges[u, v]}
+                    {"source": u, "target": v, **dict(self.graph.edges[u, v])}
                     for u, v in self.graph.edges()
                 ],
             }
@@ -303,7 +377,7 @@ class CodeGraph:
             if node in self.symbols
         ]
         degrees.sort(key=lambda x: x[1], reverse=True)
-        result = []
+        result: List[Dict] = []
         for node, degree in degrees[:n]:
             sym = self.symbols[node]
             result.append({
@@ -431,6 +505,16 @@ class GraphBuilder:
         "**/dist/**", "**/build/**", "**/venv/**", "**/.venv/**",
     ]
 
+    # File extensions handled per language
+    EXT_MAP = {
+        ".py": "python",
+        ".js": "javascript",
+        ".jsx": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".go": "go",
+    }
+
     def __init__(
         self,
         repo_path: str,
@@ -442,7 +526,12 @@ class GraphBuilder:
         self.exclude_patterns = exclude_patterns or self.DEFAULT_EXCLUDES
         self.graph = CodeGraph(db_path)
         self.parsers: Dict[str, Parser] = {}
+        self.diagnostics = BuildDiagnostics()
         self._init_parsers()
+
+    # ──────────────────────────────────────────────────────────
+    # Parser initialisation — LOUD on failure
+    # ──────────────────────────────────────────────────────────
 
     @staticmethod
     def _make_parser(lang_capsule_or_fn) -> "Optional[Parser]":
@@ -457,49 +546,74 @@ class GraphBuilder:
             return None
         try:
             obj = lang_capsule_or_fn() if callable(lang_capsule_or_fn) else lang_capsule_or_fn
-            # If it's already a Language instance, use it directly
             if isinstance(obj, Language):
                 lang = obj
             else:
                 lang = Language(obj)
-            # Try new-style constructor first, then fall back to set_language
             try:
                 return Parser(lang)
             except TypeError:
                 p = Parser()
                 p.set_language(lang)
                 return p
-        except Exception:
+        except Exception as exc:
+            # LOUD: never fail silently — report which grammar broke
+            _stderr(f"  [WARN] tree-sitter parser init failed: {exc}")
             return None
 
     def _init_parsers(self) -> None:
         if not _TREE_SITTER_AVAILABLE:
+            _stderr("[WARN] tree-sitter package not installed — parsing disabled")
+            _stderr("        Install with:  pip install tree-sitter tree-sitter-python tree-sitter-javascript tree-sitter-go")
             return
+
+        lang_map: Dict[str, Callable] = {}
 
         try:
             from tree_sitter_python import language as python_language
-            p = self._make_parser(python_language)
-            if p:
-                self.parsers["python"] = p
+            lang_map["python"] = python_language
         except ImportError:
-            pass
+            _stderr("[WARN] tree-sitter-python not installed — Python files will be skipped")
+            self.diagnostics.warn("tree-sitter-python not installed")
+        except Exception as exc:
+            _stderr(f"[ERROR] tree-sitter-python crashed during import: {exc}")
+            self.diagnostics.error(f"tree-sitter-python import crash: {exc}")
 
         try:
             from tree_sitter_javascript import language as js_language
-            p = self._make_parser(js_language)
-            if p:
-                self.parsers["javascript"] = p
-                self.parsers["typescript"] = p
+            lang_map["javascript"] = js_language
+            lang_map["typescript"] = js_language  # shared parser
         except ImportError:
-            pass
+            _stderr("[WARN] tree-sitter-javascript not installed — JS/TS files will be skipped")
+            self.diagnostics.warn("tree-sitter-javascript not installed")
+        except Exception as exc:
+            _stderr(f"[ERROR] tree-sitter-javascript crashed during import: {exc}")
+            self.diagnostics.error(f"tree-sitter-javascript import crash: {exc}")
 
         try:
             from tree_sitter_go import language as go_language
-            p = self._make_parser(go_language)
-            if p:
-                self.parsers["go"] = p
+            lang_map["go"] = go_language
         except ImportError:
-            pass
+            _stderr("[WARN] tree-sitter-go not installed — Go files will be skipped")
+            self.diagnostics.warn("tree-sitter-go not installed")
+        except Exception as exc:
+            _stderr(f"[ERROR] tree-sitter-go crashed during import: {exc}")
+            self.diagnostics.error(f"tree-sitter-go import crash: {exc}")
+
+        for lang_name, lang_fn in lang_map.items():
+            p = self._make_parser(lang_fn)
+            if p:
+                self.parsers[lang_name] = _stderr(f"[INFO] parser loaded: {lang_name}") or p
+            else:
+                _stderr(f"[WARN] could not create parser for {lang_name}")
+                self.diagnostics.warn(f"parser for {lang_name} failed to initialise")
+
+        if not self.parsers:
+            _stderr("[ERROR] No tree-sitter parsers loaded. Graph building will produce 0 symbols.")
+
+    # ──────────────────────────────────────────────────────────
+    # File discovery
+    # ──────────────────────────────────────────────────────────
 
     def _should_exclude(self, path: Path) -> bool:
         path_str = str(path).replace("\\", "/")
@@ -510,47 +624,153 @@ class GraphBuilder:
         return False
 
     def _get_language(self, file_path: Path) -> Optional[str]:
-        return {
-            ".py": "python",
-            ".js": "javascript",
-            ".jsx": "javascript",
-            ".ts": "typescript",
-            ".tsx": "typescript",
-            ".go": "go",
-        }.get(file_path.suffix.lower())
+        return self.EXT_MAP.get(file_path.suffix.lower())
 
-    def build(self) -> Dict:
-        files_processed = 0
-        symbols_found = 0
-        edges_found = 0
+    # ──────────────────────────────────────────────────────────
+    # File hashing — for incremental rebuilds
+    # ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _file_hash(path: Path) -> str:
+        """SHA-256 of file contents."""
+        try:
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+        except Exception:
+            return ""
+
+    # ──────────────────────────────────────────────────────────
+    # Public: detect changed files via git diff
+    # ──────────────────────────────────────────────────────────
+
+    def get_changed_files(self, base: str = "HEAD") -> List[str]:
+        """
+        Return list of relative file paths (forward-slash normalised)
+        that are tracked by git and have been modified/added/deleted
+        compared to *base* (default HEAD).
+        Falls back to all indexed files if git is unavailable.
+        """
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "diff", "--name-only", "--diff-filter=AM", base],
+                capture_output=True, text=True, cwd=str(self.repo_path), timeout=10,
+            )
+            if result.returncode == 0:
+                return [p.replace("\\", "/") for p in result.stdout.strip().splitlines() if p]
+        except Exception:
+            pass
+        # Fallback: return all currently-indexed files
+        return list(self.graph.file_symbols.keys())
+
+    # ──────────────────────────────────────────────────────────
+    # Public: incremental rebuild
+    # ──────────────────────────────────────────────────────────
+
+    def build_incremental(self, changed_files: Optional[List[str]] = None) -> Dict:
+        """
+        Re-parse only the files whose contents have changed.
+        If *changed_files* is None, auto-detect via git diff.
+        Falls back to full build if no prior hash data exists.
+        """
+        t0 = time.time()
+
+        # Auto-detect if not provided
+        if changed_files is None:
+            changed_files = self.get_changed_files()
+
+        if not changed_files:
+            # Nothing changed — try loading from DB
+            if self.graph.load_from_db():
+                elapsed = time.time() - t0
+                return {
+                    "files_processed": 0,
+                    "symbols_found": len(self.graph.symbols),
+                    "edges_found": self.graph.number_of_edges(),
+                    "repo_path": str(self.repo_path),
+                    "incremental": True,
+                    "unchanged": True,
+                    "elapsed_s": round(elapsed, 2),
+                    "diagnostics": self.diagnostics.to_summary(),
+                }
+
+        # Build the full graph from scratch (safe but we only re-parse changed)
+        return self.build(changed_files_only=changed_files)
+
+    # ──────────────────────────────────────────────────────────
+    # Public: full / partial build
+    # ──────────────────────────────────────────────────────────
+
+    def build(self, changed_files_only: Optional[List[str]] = None) -> Dict:
+        """
+        Build the code graph.
+        If *changed_files_only* is provided, only those files are parsed
+        and the old data for them is removed first (incremental update).
+        """
+        t0 = time.time()
+        incremental = changed_files_only is not None and len(changed_files_only) > 0
+
+        # If incremental, remove old data for changed files first
+        if incremental:
+            for fp in changed_files_only:
+                self.graph.remove_file(fp)
 
         # Phase 1: parse all files and collect raw symbols + raw calls
         all_symbols: List[Symbol] = []
         all_raw_calls: List[CallEdge] = []
+        files_processed = 0
 
-        for ext in ["*.py", "*.js", "*.jsx", "*.ts", "*.tsx", "*.go"]:
-            for file_path in self.repo_path.rglob(ext):
-                if self._should_exclude(file_path):
+        if incremental:
+            # Only parse the changed files
+            for rel_path in changed_files_only:
+                full = self.repo_path / rel_path.replace("/", os.sep)
+                if not full.exists():
+                    self.diagnostics.warn(f"File not found (deleted?): {rel_path}")
                     continue
-                language = self._get_language(file_path)
+                language = self._get_language(full)
                 if not language or language not in self.parsers:
+                    self.diagnostics.files_skipped += 1
                     continue
                 try:
-                    symbols, calls = self._parse_file(file_path, language)
+                    symbols, calls = self._parse_file(full, language)
                     all_symbols.extend(symbols)
                     all_raw_calls.extend(calls)
                     files_processed += 1
+                    self.diagnostics.files_parsed += 1
                 except Exception as e:
-                    print(f"Warning: could not parse {file_path}: {e}")
+                    _stderr(f"[ERROR] could not parse {full}: {e}")
+                    self.diagnostics.files_failed += 1
+        else:
+            # Full rebuild: scan the repo
+            for ext in ["*.py", "*.js", "*.jsx", "*.ts", "*.tsx", "*.go"]:
+                for file_path in self.repo_path.rglob(ext):
+                    if self._should_exclude(file_path):
+                        self.diagnostics.files_skipped += 1
+                        continue
+                    language = self._get_language(file_path)
+                    if not language or language not in self.parsers:
+                        self.diagnostics.files_skipped += 1
+                        continue
+                    try:
+                        symbols, calls = self._parse_file(file_path, language)
+                        all_symbols.extend(symbols)
+                        all_raw_calls.extend(calls)
+                        files_processed += 1
+                        self.diagnostics.files_parsed += 1
+                    except Exception as e:
+                        _stderr(f"[ERROR] could not parse {file_path}: {e}")
+                        self.diagnostics.files_failed += 1
 
         # Phase 2: add all symbols to the graph (populates _short_name_index)
+        symbols_found = 0
         for sym in all_symbols:
             self.graph.add_symbol(sym)
             symbols_found += 1
 
         # Phase 3: resolve call edges now that the index is fully populated
+        edges_found = 0
+        resolved_count = 0
+        unresolved_count = 0
         for call in all_raw_calls:
-            # Try to resolve bare callee short names to fully-qualified keys
             short_name = call.callee
             if short_name in self.graph.symbols:
                 pass  # already fully-qualified
@@ -558,20 +778,61 @@ class GraphBuilder:
                 resolved = self.graph._short_name_index.get(short_name)
                 if resolved and len(resolved) == 1:
                     call.callee = resolved[0]
+                    resolved_count += 1
                 elif resolved and len(resolved) > 1:
                     call.callee = resolved[0]  # best-effort: first match
+                    resolved_count += 1
+                else:
+                    unresolved_count += 1
                 # else: leave as bare short name
             self.graph.add_call(call)
             edges_found += 1
 
+        # Store file hashes for future incremental builds
+        if not incremental:
+            for sym in all_symbols:
+                full_path = self.repo_path / sym.file_path.replace("/", os.sep)
+                if full_path.exists():
+                    self.graph._file_hashes[sym.file_path] = self._file_hash(full_path)
+
+        # Persist
         self.graph.save_to_db()
 
-        return {
+        elapsed = time.time() - t0
+        result = {
             "files_processed": files_processed,
             "symbols_found": symbols_found,
             "edges_found": edges_found,
             "repo_path": str(self.repo_path),
+            "incremental": incremental,
+            "elapsed_s": round(elapsed, 2),
+            "call_resolution": {
+                "resolved": resolved_count,
+                "unresolved": unresolved_count,
+            },
+            "diagnostics": self.diagnostics.to_summary(),
         }
+
+        # Print summary to stderr (visible, doesn't pollute MCP stdout)
+        if incremental:
+            _stderr(f"[INFO] Incremental build: {files_processed} files, {symbols_found} new symbols, {edges_found} edges ({elapsed:.1f}s)")
+        else:
+            _stderr(f"[INFO] Full build: {files_processed} files, {symbols_found} symbols, {edges_found} edges ({elapsed:.1f}s)")
+
+        if self.diagnostics.warnings:
+            _stderr(f"[WARN] {len(self.diagnostics.warnings)} warning(s) during build")
+            for w in self.diagnostics.warnings[:5]:
+                _stderr(f"        - {w}")
+        if self.diagnostics.errors:
+            _stderr(f"[ERROR] {len(self.diagnostics.errors)} error(s) during build")
+            for e in self.diagnostics.errors[:5]:
+                _stderr(f"        - {e}")
+
+        return result
+
+    # ──────────────────────────────────────────────────────────
+    # Parsing
+    # ──────────────────────────────────────────────────────────
 
     def _parse_file(self, file_path: Path, language: str) -> Tuple[List[Symbol], List[CallEdge]]:
         relative_path = str(file_path.relative_to(self.repo_path)).replace("\\", "/")
@@ -619,12 +880,11 @@ class GraphBuilder:
                         column_start=node.start_point[1],
                         column_end=node.end_point[1],
                     ))
-                    # Only recurse into the class body to avoid double-visiting
                     body = node.child_by_field_name("body")
                     if body:
                         for child in body.children:
                             visit(child, cname)
-                return  # don't fall through to generic child recursion
+                return
 
             elif node.type == "function_definition":
                 name_node = node.child_by_field_name("name")
@@ -649,14 +909,12 @@ class GraphBuilder:
                     body = node.child_by_field_name("body")
                     if body:
                         self._collect_python_calls(body, key, file_path, source, calls)
-                    # recurse for nested functions (but stay in current class_name context)
                     body2 = node.child_by_field_name("body")
                     if body2:
                         for child in body2.children:
                             visit(child, class_name)
                 return
 
-            # generic recursion for top-level statements
             for child in node.children:
                 visit(child, class_name)
 
@@ -671,15 +929,13 @@ class GraphBuilder:
             func_node = node.child_by_field_name("function")
             if func_node:
                 raw = text(func_node)
-                # bare name or attribute call (self.foo, obj.method)
                 if "(" not in raw:
                     callee_short = raw.split(".")[-1] if "." in raw else raw
-                    # Try to resolve to a known key, fall back to short name
-                    resolved = self.graph._short_name_index.get(callee_short)
-                    callee_key = resolved[0] if resolved else callee_short
+                    # NOTE: resolution happens in build() Phase 3,
+                    # after _short_name_index is fully populated.
                     calls.append(CallEdge(
                         caller=caller_key,
-                        callee=callee_key,
+                        callee=callee_short,
                         call_type="direct_call",
                         file_path=file_path,
                         line=node.start_point[0] + 1,
@@ -700,7 +956,6 @@ class GraphBuilder:
             return source[node.start_byte:node.end_byte]
 
         def visit(node: Node, class_name: Optional[str] = None, current_func_key: Optional[str] = None) -> None:
-            # ── Class declaration ──────────────────────────────
             if node.type in ("class_declaration", "class"):
                 name_node = node.child_by_field_name("name")
                 if name_node:
@@ -720,7 +975,6 @@ class GraphBuilder:
                             visit(child, cname, current_func_key)
                 return
 
-            # ── Method definition ──────────────────────────────
             elif node.type == "method_definition":
                 name_node = node.child_by_field_name("name")
                 if name_node:
@@ -743,7 +997,6 @@ class GraphBuilder:
                             visit(child, class_name, key)
                 return
 
-            # ── Function declaration ───────────────────────────
             elif node.type == "function_declaration":
                 name_node = node.child_by_field_name("name")
                 if name_node:
@@ -764,7 +1017,6 @@ class GraphBuilder:
                             visit(child, class_name, key)
                 return
 
-            # ── Arrow / variable-assigned functions ───────────
             elif node.type == "variable_declarator":
                 name_node = node.child_by_field_name("name")
                 value_node = node.child_by_field_name("value")
@@ -786,7 +1038,6 @@ class GraphBuilder:
                             visit(child, class_name, key)
                     return
 
-            # generic recursion
             for child in node.children:
                 visit(child, class_name, current_func_key)
 
@@ -802,13 +1053,10 @@ class GraphBuilder:
             if func_node:
                 raw = text(func_node)
                 if "(" not in raw:
-                    # member call: this.foo() → "foo", obj.method() → "method"
                     callee_short = raw.split(".")[-1]
-                    resolved = self.graph._short_name_index.get(callee_short)
-                    callee_key = resolved[0] if resolved else callee_short
                     calls.append(CallEdge(
                         caller=caller_key,
-                        callee=callee_key,
+                        callee=callee_short,
                         call_type="direct_call",
                         file_path=file_path,
                         line=node.start_point[0] + 1,
@@ -829,7 +1077,6 @@ class GraphBuilder:
             return source[node.start_byte:node.end_byte]
 
         def visit(node: Node) -> None:
-            # ── Function declaration ───────────────────────────
             if node.type == "function_declaration":
                 name_node = node.child_by_field_name("name")
                 if name_node:
@@ -847,13 +1094,11 @@ class GraphBuilder:
                     if body:
                         self._collect_go_calls(body, key, file_path, source, calls)
 
-            # ── Method declaration ─────────────────────────────
             elif node.type == "method_declaration":
                 name_node = node.child_by_field_name("name")
                 recv_node = node.child_by_field_name("receiver")
                 receiver_type = ""
                 if recv_node:
-                    # receiver looks like: (r *ReceiverType) — extract type name
                     recv_text = text(recv_node)
                     m = re.search(r"\*?(\w+)\s*\)", recv_text)
                     if m:
@@ -875,7 +1120,6 @@ class GraphBuilder:
                     if body:
                         self._collect_go_calls(body, key, file_path, source, calls)
 
-            # ── Type / struct declaration ──────────────────────
             elif node.type == "type_declaration":
                 for child in node.children:
                     if child.type == "type_spec":
@@ -908,11 +1152,9 @@ class GraphBuilder:
                 raw = text(func_node)
                 if "(" not in raw:
                     callee_short = raw.split(".")[-1]
-                    resolved = self.graph._short_name_index.get(callee_short)
-                    callee_key = resolved[0] if resolved else callee_short
                     calls.append(CallEdge(
                         caller=caller_key,
-                        callee=callee_key,
+                        callee=callee_short,
                         call_type="direct_call",
                         file_path=file_path,
                         line=node.start_point[0] + 1,
