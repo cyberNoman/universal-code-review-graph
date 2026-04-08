@@ -6,12 +6,10 @@ Supports: Python, JavaScript, TypeScript, Go
 Works with: Claude, Kimi, Qwen, Gemini, ChatGPT, Cursor, Windsurf, Zed, Continue
 """
 
-import os
 import re
 import sqlite3
-import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 
@@ -70,7 +68,7 @@ def make_symbol_key(file_path: str, name: str) -> str:
 class CodeGraph:
     """In-memory code graph with NetworkX backend."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None) -> None:
         self.db_path = db_path
         self.graph = nx.DiGraph()
         self.symbols: Dict[str, Symbol] = {}          # key → Symbol
@@ -438,7 +436,7 @@ class GraphBuilder:
         repo_path: str,
         db_path: str = ".code_graph.db",
         exclude_patterns: Optional[List[str]] = None,
-    ):
+    ) -> None:
         self.repo_path = Path(repo_path).resolve()
         self.db_path = db_path
         self.exclude_patterns = exclude_patterns or self.DEFAULT_EXCLUDES
@@ -526,6 +524,10 @@ class GraphBuilder:
         symbols_found = 0
         edges_found = 0
 
+        # Phase 1: parse all files and collect raw symbols + raw calls
+        all_symbols: List[Symbol] = []
+        all_raw_calls: List[CallEdge] = []
+
         for ext in ["*.py", "*.js", "*.jsx", "*.ts", "*.tsx", "*.go"]:
             for file_path in self.repo_path.rglob(ext):
                 if self._should_exclude(file_path):
@@ -535,15 +537,32 @@ class GraphBuilder:
                     continue
                 try:
                     symbols, calls = self._parse_file(file_path, language)
-                    for sym in symbols:
-                        self.graph.add_symbol(sym)
-                        symbols_found += 1
-                    for call in calls:
-                        self.graph.add_call(call)
-                        edges_found += 1
+                    all_symbols.extend(symbols)
+                    all_raw_calls.extend(calls)
                     files_processed += 1
                 except Exception as e:
                     print(f"Warning: could not parse {file_path}: {e}")
+
+        # Phase 2: add all symbols to the graph (populates _short_name_index)
+        for sym in all_symbols:
+            self.graph.add_symbol(sym)
+            symbols_found += 1
+
+        # Phase 3: resolve call edges now that the index is fully populated
+        for call in all_raw_calls:
+            # Try to resolve bare callee short names to fully-qualified keys
+            short_name = call.callee
+            if short_name in self.graph.symbols:
+                pass  # already fully-qualified
+            else:
+                resolved = self.graph._short_name_index.get(short_name)
+                if resolved and len(resolved) == 1:
+                    call.callee = resolved[0]
+                elif resolved and len(resolved) > 1:
+                    call.callee = resolved[0]  # best-effort: first match
+                # else: leave as bare short name
+            self.graph.add_call(call)
+            edges_found += 1
 
         self.graph.save_to_db()
 

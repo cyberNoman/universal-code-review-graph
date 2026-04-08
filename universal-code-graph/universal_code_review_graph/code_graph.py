@@ -6,12 +6,10 @@ Supports: Python, JavaScript, TypeScript, Go
 Works with: Claude, Kimi, Qwen, Gemini, ChatGPT, Cursor, Windsurf, Zed, Continue
 """
 
-import os
 import re
 import sqlite3
-import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 
@@ -70,7 +68,7 @@ def make_symbol_key(file_path: str, name: str) -> str:
 class CodeGraph:
     """In-memory code graph with NetworkX backend."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None) -> None:
         self.db_path = db_path
         self.graph = nx.DiGraph()
         self.symbols: Dict[str, Symbol] = {}          # key → Symbol
@@ -438,7 +436,7 @@ class GraphBuilder:
         repo_path: str,
         db_path: str = ".code_graph.db",
         exclude_patterns: Optional[List[str]] = None,
-    ):
+    ) -> None:
         self.repo_path = Path(repo_path).resolve()
         self.db_path = db_path
         self.exclude_patterns = exclude_patterns or self.DEFAULT_EXCLUDES

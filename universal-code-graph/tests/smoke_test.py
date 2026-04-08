@@ -4,15 +4,18 @@ Tests the graph engine against real source files.
 """
 import sys
 import os
+import tempfile
 from pathlib import Path
 
 # Ensure we can import code_graph from the parent dir
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from code_graph import GraphBuilder
 
+_TMPDIR = Path(tempfile.gettempdir())
+
 
 def test_python_parser():
-    tmp = Path("/tmp/smoke_py")
+    tmp = _TMPDIR / "smoke_py"
     tmp.mkdir(exist_ok=True)
     (tmp / "sample.py").write_text("""
 class MyClass:
@@ -36,7 +39,7 @@ def standalone():
 
 
 def test_js_parser():
-    tmp = Path("/tmp/smoke_js")
+    tmp = _TMPDIR / "smoke_js"
     tmp.mkdir(exist_ok=True)
     (tmp / "sample.js").write_text("""
 class ApiClient {
@@ -60,7 +63,7 @@ function main() {
 
 
 def test_go_parser():
-    tmp = Path("/tmp/smoke_go")
+    tmp = _TMPDIR / "smoke_go"
     tmp.mkdir(exist_ok=True)
     (tmp / "main.go").write_text("""
 package main
@@ -91,7 +94,7 @@ func main() {
 def test_self_index():
     """Index the code_graph.py file itself."""
     this_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    builder = GraphBuilder(repo_path=this_dir, db_path="/tmp/self.db")
+    builder = GraphBuilder(repo_path=this_dir, db_path=str(_TMPDIR / "self.db"))
     stats = builder.build()
     assert stats["files_processed"] >= 1
     assert stats["symbols_found"] > 0
