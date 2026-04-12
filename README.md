@@ -144,6 +144,39 @@ claude mcp add code-graph python3 /path/to/universal-code-graph/server.py
 ```
 </details>
 
+---
+
+## VS Code Extension (Manual Install)
+
+Since this is an open-source community project, the VS Code extension is **not published to the marketplace**. Install it manually:
+
+### Option A: Download .vsix from Releases
+
+```bash
+# Download vscode-code-graph-1.0.0.vsix from GitHub Releases
+# Then install:
+code --install-extension vscode-code-graph-1.0.0.vsix
+```
+
+### Option B: Build from Source
+
+```bash
+git clone https://github.com/YOUR_USERNAME/universal-code-review-graph.git
+cd universal-code-review-graph/vscode-code-graph
+npm install
+npm run package
+code --install-extension universal-code-graph-1.0.0.vsix
+```
+
+### VS Code Commands After Install
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| Build Code Graph | `Ctrl+Shift+G` | Index your codebase |
+| Search Symbols | `Ctrl+Shift+S` | Find symbols in graph |
+| Review Changes | - | Analyze git changes |
+| Get Symbol Impact | - | Find dependencies |
+
 That's it. Now tell your AI:
 
 ```

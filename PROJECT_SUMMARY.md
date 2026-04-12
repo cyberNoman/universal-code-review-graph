@@ -117,11 +117,26 @@ An elegant website showcasing the tool:
 
 ### Option 1: VS Code Extension (Recommended)
 
-1. Install extension from marketplace (or `.vsix`)
-2. Open a workspace
-3. Press `Ctrl+Shift+G` to build graph
-4. Copy MCP config for your AI
-5. Start reviewing!
+Since this is an open-source community project, install the extension manually:
+
+```bash
+# Download from GitHub Releases
+code --install-extension vscode-code-graph-1.0.0.vsix
+```
+
+Or build from source:
+```bash
+git clone https://github.com/YOUR_USERNAME/universal-code-review-graph.git
+cd vscode-code-graph
+npm install && npm run package
+code --install-extension universal-code-graph-1.0.0.vsix
+```
+
+Then:
+1. Open a workspace
+2. Press `Ctrl+Shift+G` to build graph
+3. Copy MCP config for your AI
+4. Start reviewing!
 
 ### Option 2: Standalone MCP Server
 
@@ -187,29 +202,27 @@ pip install -r requirements.txt
 
 ---
 
-## 🛠️ Next Steps (Optional)
+## 🛠️ Next Steps (Community Driven)
 
-1. **Publish to VS Code Marketplace**
-   - Create publisher account
-   - Run `vsce publish`
-
-2. **Publish to PyPI**
+1. **Publish to PyPI** (Optional but recommended)
    - `python setup.py sdist bdist_wheel`
    - `twine upload dist/*`
+   - Makes it `pip install`-able
 
-3. **Add More Languages**
+2. **Create GitHub Releases**
+   - Build `.vsix` for VS Code
+   - Build `.whl` for PyPI
+   - Tag versions
+
+3. **Add More Languages** (Community contributions welcome!)
    - Rust (tree-sitter-rust)
    - Java (tree-sitter-java)
    - C/C++ (tree-sitter-cpp)
 
-4. **Add Web Dashboard**
-   - Visual graph explorer
-   - Interactive node graph
-   - Search and filter
-
-5. **GitHub Actions Integration**
-   - Auto-build on PR
-   - Comment with impacted symbols
+4. **Community Features**
+   - Web dashboard for graph visualization
+   - GitHub Actions integration
+   - Discord/Slack for support
 
 ---
 

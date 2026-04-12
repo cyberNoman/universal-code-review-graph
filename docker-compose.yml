@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  code-graph:
+    build: .
+    container_name: universal-code-graph
+    volumes:
+      # Mount your project here
+      - ./:/workspace
+      # Persist the graph database
+      - code-graph-db:/workspace/.code_graph
+    working_dir: /workspace
+    command: >
+      sh -c "
+        if [ ! -f /workspace/.code_graph.db ]; then
+          echo 'Building code graph...';
+          code-graph-server build /workspace;
+        fi;
+        echo 'Code graph ready!';
+        code-graph-server --version
+      "
+    
+  # Optional: Web interface (if you add one later)
+  # web-ui:
+  #   build: ./web-ui
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - code-graph-db:/data
+
+volumes:
+  code-graph-db:

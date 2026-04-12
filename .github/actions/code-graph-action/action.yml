@@ -1,0 +1,100 @@
+name: 'Universal Code Review Graph'
+description: 'Analyze code changes and provide impacted symbols for PR review'
+author: 'Universal Code Review Graph Community'
+branding:
+  icon: 'git-branch'
+  color: 'blue'
+
+inputs:
+  github-token:
+    description: 'GitHub token for PR comments'
+    required: true
+    default: ${{ github.token }}
+  
+  max-depth:
+    description: 'Maximum depth for dependency traversal'
+    required: false
+    default: '3'
+  
+  include-upstream:
+    description: 'Include upstream callers'
+    required: false
+    default: 'true'
+  
+  include-downstream:
+    description: 'Include downstream callees'
+    required: false
+    default: 'true'
+  
+  comment-on-pr:
+    description: 'Post results as PR comment'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install Universal Code Review Graph
+      shell: bash
+      run: |
+        pip install universal-code-review-graph[all]
+    
+    - name: Build Code Graph
+      shell: bash
+      run: |
+        cd $GITHUB_WORKSPACE
+        python -m universal_code_review_graph.build
+    
+    - name: Analyze Changed Files
+      shell: bash
+      run: |
+        cd $GITHUB_WORKSPACE
+        # Get changed files from PR
+        CHANGED_FILES=$(git diff --name-only HEAD^ HEAD | tr '\n' ' ')
+        
+        # Run review_changes
+        python -m universal_code_review_graph.review \
+          --files "$CHANGED_FILES" \
+          --depth ${{ inputs.max-depth }} \
+          --upstream ${{ inputs.include-upstream }} \
+          --downstream ${{ inputs.include-downstream }} \
+          --output review_result.json
+    
+    - name: Comment on PR
+      if: inputs.comment-on-pr == 'true'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const result = JSON.parse(fs.readFileSync('review_result.json', 'utf8'));
+          
+          const body = `## 🔍 Code Graph Analysis
+          
+          **Changed Files:** ${result.changed_files.length}
+          **Impacted Symbols:** ${result.total_impacted}
+          **Upstream Dependencies:** ${result.upstream_count}
+          **Downstream Dependencies:** ${result.downstream_count}
+          
+          ### Files to Review
+          ${result.files_to_review.map(f => `- \`${f}\``).join('\n')}
+          
+          ### Impacted Symbols
+          ${result.impacted_symbols.slice(0, 20).map(s => `- \`${s}\``).join('\n')}
+          ${result.impacted_symbols.length > 20 ? `\n... and ${result.impacted_symbols.length - 20} more` : ''}
+          
+          ---
+          *Powered by [Universal Code Review Graph](https://github.com/YOUR_USERNAME/universal-code-review-graph)*
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });

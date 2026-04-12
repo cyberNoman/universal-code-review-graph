@@ -1,0 +1,51 @@
+#!/bin/bash
+# Pre-commit hook for Universal Code Review Graph
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+echo "🔍 Running Code Graph impact analysis..."
+
+# Check if code-graph is installed
+if ! command -v code-graph-server &> /dev/null; then
+    echo "⚠️  code-graph-server not found. Install with: pip install universal-code-review-graph"
+    exit 0
+fi
+
+# Get staged files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(py|js|ts|go)$' || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    echo "✅ No code files staged."
+    exit 0
+fi
+
+# Check if graph exists
+if [ ! -f ".code_graph.db" ]; then
+    echo "📊 Building code graph for the first time..."
+    code-graph-server build-graph .
+fi
+
+# Run impact analysis
+echo ""
+echo "📋 Changed files:"
+echo "$STAGED_FILES" | head -10
+if [ $(echo "$STAGED_FILES" | wc -l) -gt 10 ]; then
+    echo "... and more"
+fi
+
+echo ""
+echo "🔗 Checking impact..."
+
+# Create a temporary file with staged file list
+STAGED_LIST=$(mktemp)
+echo "$STAGED_FILES" > "$STAGED_LIST"
+
+# Run review (this is a simplified version - integrate with actual CLI)
+echo ""
+echo "⚠️  Pre-commit hook is a placeholder."
+echo "   To enable full functionality, use the GitHub Action or run manually:"
+echo "   code-graph-server review-changes $(cat $STAGED_LIST)"
+echo ""
+
+rm "$STAGED_LIST"
+
+exit 0

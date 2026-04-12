@@ -193,14 +193,15 @@ export class CodeGraphCommands {
         const result = await this.mcpServer.searchSymbols(query, { limit: 20 });
         
         if (result.symbols && result.symbols.length > 0) {
+            const items = result.symbols.map((s: any) => ({
+                label: s.name,
+                description: `${s.symbol_type} - ${s.file_path}:${s.line_start}`,
+                symbol: s
+            }));
             const selected = await vscode.window.showQuickPick(
-                result.symbols.map((s: any) => ({
-                    label: s.name,
-                    description: `${s.symbol_type} - ${s.file_path}:${s.line_start}`,
-                    symbol: s
-                })),
+                items,
                 { placeHolder: 'Select a symbol' }
-            );
+            ) as any;
 
             if (selected) {
                 const uri = vscode.Uri.file(selected.symbol.file_path);

@@ -1,0 +1,54 @@
+# Universal Code Review Graph - Configuration File
+# Copy this to .code-graph.yml in your project root
+
+# Repository settings
+repo:
+  # Paths to include (relative to repo root)
+  include:
+    - "src/"
+    - "lib/"
+  
+  # Paths to exclude
+  exclude:
+    - "**/tests/**"
+    - "**/test_*.py"
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/__pycache__/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/*.min.js"
+
+# Language settings
+languages:
+  primary: auto  # auto-detect, or specify: python, javascript, typescript, go
+  
+# Graph settings
+graph:
+  # Maximum depth for dependency traversal
+  max_depth: 5
+  
+  # Include only these symbol types
+  symbol_types:
+    - function
+    - class
+    - method
+  
+# Review settings
+review:
+  # Default depth for review_changes
+  default_depth: 3
+  
+  # Always include upstream/downstream
+  include_upstream: true
+  include_downstream: true
+
+# MCP Server settings
+server:
+  # Port for HTTP mode (optional)
+  # port: 8080
+  
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  log_level: INFO
