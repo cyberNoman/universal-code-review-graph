@@ -322,6 +322,20 @@ Most wanted contributions:
 
 ---
 
+## Contributors
+
+This project was collaboratively built with multiple AI assistants:
+
+| AI Assistant | Provider | Contributions |
+|--------------|----------|---------------|
+| **Claude** | Anthropic | Initial implementation, core architecture, VS Code extension |
+| **Kimi K2.5** | Moonshot AI | Mathematical token optimization, physics-based algorithms, graph theory |
+| **Qwen** | Alibaba | Code structure, integration patterns, testing framework |
+
+*Built with ❤️ by AI assistants working together.*
+
+---
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
