@@ -435,15 +435,21 @@ On startup, the server automatically finds and loads `.code_graph.db` in the wor
 
 ## 👥 Contributors
 
-This project was collaboratively built with multiple AI assistants:
+This project was collaboratively built by a human-AI team:
 
+### Human
+| Contributor | Role | Contributions |
+|-------------|------|---------------|
+| **Noman** ([@cyberNoman](https://github.com/cyberNoman)) | Project Lead, Architect | Vision, direction, integration, testing, deployment |
+
+### AI Assistants
 | AI Assistant | Provider | Contributions |
 |--------------|----------|---------------|
 | **Claude** | Anthropic | Initial implementation, core architecture, VS Code extension |
 | **Kimi K2.5** | Moonshot AI | Mathematical token optimization, physics-based algorithms, graph theory |
 | **Qwen** | Alibaba | Code structure, integration patterns, testing framework |
 
-*Built with ❤️ by AI assistants working together.*
+*Built with ❤️ by Human + AI collaboration. The future of software development.*
 
 ---
 
