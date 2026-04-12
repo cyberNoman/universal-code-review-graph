@@ -127,7 +127,8 @@ def cmd_stats(args):
         print()
         print(f"   Most connected symbols:")
         for sym in stats['most_connected'][:5]:
-            print(f"      {sym['name']} ({sym['connections']} connections)")
+            conns = sym.get('connections', sym.get('degree', sym.get('call_count', '?')))
+            print(f"      {sym['name']} ({conns} connections)")
     
     return 0
 

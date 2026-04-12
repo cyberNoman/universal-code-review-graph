@@ -4,8 +4,9 @@
 
 **One MCP server. Any AI assistant. 8–15× fewer tokens. Advanced mathematical optimization.**
 
+[![Tests](https://github.com/cyberNoman/universal-code-review-graph/actions/workflows/tests.yml/badge.svg)](https://github.com/cyberNoman/universal-code-review-graph/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
 [![MCP](https://img.shields.io/badge/Protocol-MCP-purple)](https://modelcontextprotocol.io)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](universal-code-graph/CONTRIBUTING.md)
 [![Token Savings](https://img.shields.io/badge/Token%20Savings-85--93%25-success)](README.md)
